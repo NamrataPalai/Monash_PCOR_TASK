@@ -1,0 +1,237 @@
+---
+title: "PCOR_Task"
+author: "Namrata Palai"
+date: "13/02/2021"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# TASK
+
+My name is Dr. Mo and I am a urologist from PCOR Hospital (denoted in Col A in PCOR File.xlsx). Please provide me with a summary of my performance over time compared to other urologists in PCOR Hospital (the other nine urologists in Col A in POCR File.xlsx).
+
+# Data Description
+
+**File Name: PCOR File.xlsx** 
+
+------------------------------------------------------------------
+|**Column in PCOR File.xlsx**|**Data field name**|**Description** |
+------------------------------------------------------------------
+|Column A                    | SURGEON           | Urologist Name |
+------------------------------------------------------------------
+|Column B                    | SURGERY DATE      | Date of Surgery|
+------------------------------------------------------------------
+|Column C                    | STAGE             | Stage of Cancer|
+------------------------------------------------------------------
+|Column D                    | MARGIN STATUS     |  Margin status |
+                             |                     (1: Positive;  |
+                             |                       0: Negative) |
+------------------------------------------------------------------
+
+Each row corresponds to a patient who underwent a robotic radical prostatectomy in PCOR Hospital.
+
+Read the Excel File using **read_excel** function & store it as data frame in R.
+View the structure of the data frame using **str() **function.
+Return the first n rows of a data frame in R using **head()** function.
+```{r}
+library("readxl")
+#Import the data, view the structure & first 5 records of data frame
+my_data <- read_excel("PCOR File.xlsx")
+str(my_data)
+head(my_data,5)
+```
+Viewing the structure of the dataframe my_data, we see the data frame has 2,087 records & 4 columns namely:
+Surgeon                   (data type: Character)
+SurgeryDt                 (data type: POSIXct)
+Stage                     (data type: Character)
+MarginStatus              (data type: Numeric)
+
+Exploring unique values of each column in the data frame using **unique()** function.
+
+```{r}
+#fetch the unique values of the specified columns of data frame
+print(paste("List of surgeons(urologist) of PCOR Hospital:"))
+unique(my_data$Surgeon)
+
+print(paste("The stages of prostate cancer:"))
+unique(my_data$Stage)
+
+print(paste("The possible margin status:"))
+unique(my_data$MarginStatus)
+
+
+print(paste("Surgeries performed across the years:"))
+year<-format(my_data$SurgeryDt, format="%Y") 
+unique(year)
+```
+After looking through the unique values of the above mentioned columns of the data frame, following are the observations:
+
+1. There are **10 Surgeons** namely **"Al" "Bo" "Cy" "Di" "Ed" "Mo" "Oz" "Ti" "Vi" "Zo"**.
+
+2.It is observed in the prostate cancer stages that, there are certain **NA** values, and it is observed that stage T3a & T3b might have been erroneously entered into the file as T3A & T3B. These need to be rectified as they demonstrate the same cancer stages.
+
+Rectifying the above errors by using ifelse function, to replace the erroneous values with the correct values if the condition specified is met.
+
+```{r}
+my_data$Stage<- ifelse(my_data$Stage == "T3A","T3a",my_data$Stage)
+my_data$Stage<- ifelse(my_data$Stage == "T3B","T3b",my_data$Stage)
+unique(my_data$Stage)
+```
+
+3. **NA** values have also been observed in Margin status column.
+0 illustrates: Negative
+1 ilustrates : Positve
+4. The file consists of surgeries performed across the time period of **3 years**, i.e from **2018-2020**.
+
+The Surgery date is of the data type **POSIXct** which is an internal implementations of date/time which represents the (signed) number of seconds since the beginning of 1970 (in the UTC time zone) as a numeric vector. The year from the Surgery date is extracted using **format** function to determine the time period across which the data has been provided.
+
+```{r}
+library(tidyverse)
+my_data %>% summarise_all(funs(sum(is.na(.))))
+```
+As observed from above, there are **33 & 49 NA** values in **Stage** & **MarginStatus** columns respectively. 
+
+Since, we are to assess the performance of UROLOGISTS over the given time period on the basis of percentage margin positivity,the **NA** values in the Margin Status would not contribute to the analysis, hence the data with unknown margin status is dropped for the further analysis.
+
+```{r}
+library(tidyr)
+my_data<-my_data %>% drop_na(MarginStatus)
+my_data %>% summarise_all(funs(sum(is.na(.))))
+```
+After dropping the rows with unknown MarginStatus, we observe form the above summary that there are **4 NA** values in the Stage column. 
+
+**Please Note**: For precise analysis, we drop the data respective to these unknown Stage details as the requirement suggests that it is also important to dichotomise the stage of cancer into T2 and T3 when assessing urologists’ performance.
+
+```{r}
+my_data<-my_data %>% drop_na(Stage)
+my_data %>% summarise_all(funs(sum(is.na(.))))
+```
+The above summary suggests that there are no **NA** values in our data.
+
+Going ahead with our performance analysis, we perform following steps:
+
+1. Extract year from Surgery date column data and store the year in a new column named year in the same data frame.
+
+2. Segregate the data relevant to positive margin and store the same in a new data frame.
+
+3.Create a new data frame to calculate the **total number of surgeries** with **positive margin** for any given Stage of prostate cancer per year using **groupby** and **summarize** functions from **dplyr** package.
+
+4. **MERGE** the data frames created in step 2 and step 3.
+
+5. Calculate the percentage of margin positivity and store the same in a new column named **positive_per_margin** in the same data frame.
+
+```{r}
+library(dplyr)
+
+#extract year from the date and store in a new column
+my_data$year <- format(my_data$SurgeryDt, format="%Y")
+
+#create new data frame and store data relevant to Negative margin status
+NegativeMargin <- my_data %>% dplyr::group_by(Surgeon,year,Stage) %>% dplyr::summarize(countNegMargin=sum(MarginStatus =="0"))
+
+#create new data frame and store data relevant to Positive margin status
+PositiveMargin <- my_data %>% dplyr::group_by(Surgeon,year,Stage) %>% dplyr::summarize(countPosMargin=sum(MarginStatus =="1"))
+
+#####logic
+#create a new data frame to calculate the total number of surgeries with positive margin for any given Stage of prostate cancer per year 
+PosMarginCal <- PositiveMargin %>% dplyr::group_by(year,Stage)%>%dplyr::summarize(countTotPosMargin=sum(countPosMargin))
+
+#merge the data frames for performance analysis
+performanceCal <- merge(PosMarginCal,PositiveMargin)
+
+#calculate the percentage of margin positivity and store its value in a new column
+performanceCal$positive_per_margin <- (performanceCal$countPosMargin/performanceCal$countTotPosMargin)*100
+```
+
+For further analysis,the findings are projected using visualization using **ggplot2** package.
+
+The performance analysis is done on the basis of the percentage of margin positivity throughout the time given time period for each prostate cancer stage.
+
+```{r}
+#load package ggplot2 
+library(ggplot2)
+
+#Plot the percentage margin positivity across the given time period for each surgeon
+plotForPositiveMargin<-ggplot(data = performanceCal, aes(x = year, y = positive_per_margin, color = Surgeon)) + 
+  geom_point(size=2) +
+  labs(title = "PERFORMANCE ANALYSIS OF UROLOGISTS\n", x = "TIME PERIOD", y = "PERCENTAGE OF MARGIN POSITIVITY", color = "SURGEON\n") +
+  scale_color_manual(values = c("blue", "red","yellow","green","black","pink","maroon","purple","darkgreen","magenta")) +theme_bw() +theme(axis.text.x = element_text(size = 10), axis.title.x = element_text(size = 10),axis.text.y = element_text(size = 10), axis.title.y = element_text(size = 10),plot.title = element_text(size = 15,hjust = 0.5, face = "bold", color = "black"))+facet_wrap(~Stage)
+
+plotForPositiveMargin
+```
+**Please Note: The 0% margin positivity in the above graph suggests that the urologist has not performed surgery for that given prostate cancer stage.**
+
+#PERFORMANCE ANALYSIS: OBSERVATIONS FROM VISUALIZATION
+
+Reference used for gathering understanding of the stages of Prostate cancer and the Margin Status: 
+
+**[1]https://www.cancerresearchuk.org/about-cancer/prostate-cancer/stages/tnm-staging**
+**[2]https://www.cancer.gov/publications/dictionaries/cancer-terms/def/margin**
+
+As per the understanding gathered using the above references:
+
+NEGATIVE MARGIN(0): It is described as negative or clean when the pathologist finds no cancer cells at the edge of the tissue, suggesting that all of the cancer has been removed.
+
+POSITIVE MARGIN(1): It is described as positive or involved when the pathologist finds cancer cells at the edge of the tissue, suggesting that all of the cancer has not been removed.
+
+As the performance is to be assessed using the percentage of margin positivity, hence LOWER the percentage of margin positivity, the better the performance.
+
+**Stage wise Performance Analysis of Dr Mo across years**
+
+1. Stage T2
+In 2018, the percentage of margin positivity was 10% which gradually increased to 12% approximately in 2019.Percentage decrease was observed in 2020, to about 8% approximately showing that across the 3 years, performance Dr.Mo has been better in the year 2020 suggesting there were lesser number of surgeries with cancer cells persisting at the edge of the tissue.
+
+2. Stage T3
+In 2018, the percentage of margin positivity was 12% which gradually increased to 14% approximately in 2019.Percentage decrease was observed in 2020, to about 10% approximately showing that across the 3 years, performance Dr.Mo has been better in the year 2020 suggesting there were lesser number of surgeries with cancer cells persisting at the edge of the tissue.
+
+3.Stage T3a
+In 2018, the percentage of margin positivity was 48% which drastically decreased to 22% approximately in 2019.Percentage increase was observed in 2020, to about 32% approximately showing that across the 3 years, performance Dr.Mo has been better in the year 2019 suggesting there were lesser number of surgeries with cancer cells persisting at the edge of the tissue.
+
+4.Stage T3b
+In 2018, the percentage of margin positivity was 22% which decreased to 20% approximately in 2019.Percentage increase was observed in 2020, to about 29% approximately showing that across the 3 years, performance Dr.Mo has been better in the year 2019 suggesting there were lesser number of surgeries with cancer cells still persisting at the edge of the tissue.
+
+Overall speaking of Dr.Mo, the best performance has been observed while performing a surgery for T2 prostate cancer stage in year 2018 with the least percentage of margin positivity i.e. 8%. Whereas, the worst performance has been recorded while performing a surgery for T3a prostate cancer stage in year 2018 with the highest percentage of margin positivity i.e. 48%.
+
+**Performance Analysis of Dr Mo relative to other urologists**
+The highest percentage of margin positivity has been observed for Dr Di across all years and almost all stages suggesting worst performance out of all the urologists.
+
+Dr Mo, when compared to other urologists has not recorded good performance as it has the second highest percentage of margin positivity afer Dr Di for almost all stages across all the years.
+
+The best performances observed from the visualization above with percentage margin positivity of 2.3% approximately are:
+
+1. Dr Vi performed surgery on T3 STAGE in year 2018.
+2. Dr Al performed surgery on T3 STAGE in year 2018.
+3. Dr Oz performed surgery on T3 STAGE in year 2018.
+4. Dr Zo performed surgery on T3 STAGE in year 2018.
+
+Also, as T3a & T3b are the divided stages of T3 prostate cancer, hence taking a overall count of all the T3 stages margin, following visualisation is projected.
+
+```{r}
+my_data1 <- read_excel("PCOR File.xlsx")
+my_data1$Stage<- ifelse(my_data1$Stage == "T3a","T3",my_data1$Stage)
+my_data1$Stage<- ifelse(my_data1$Stage == "T3b","T3",my_data1$Stage)
+my_data1$Stage<- ifelse(my_data1$Stage == "T3A","T3",my_data1$Stage)
+my_data1$Stage<- ifelse(my_data1$Stage == "T3B","T3",my_data1$Stage)
+unique(my_data1$Stage)
+
+my_data1<-my_data1 %>% drop_na(MarginStatus)
+my_data1<-my_data1 %>% drop_na(Stage)
+my_data1 %>% summarise_all(funs(sum(is.na(.))))
+
+
+my_data1$year <- format(my_data1$SurgeryDt, format="%Y")
+NegativeMargin_NEW <- my_data1 %>% dplyr::group_by(Surgeon,year,Stage) %>% dplyr::summarize(countNegMargin=sum(MarginStatus =="0"))
+PositiveMargin_NEW <- my_data1 %>% dplyr::group_by(Surgeon,year,Stage) %>% dplyr::summarize(countPosMargin=sum(MarginStatus =="1"))
+PosMarginCal_NEW <- PositiveMargin_NEW %>% dplyr::group_by(year,Stage)%>%dplyr::summarize(countTotPosMargin=sum(countPosMargin))
+performanceCal_NEW <- merge(PosMarginCal_NEW,PositiveMargin_NEW)
+performanceCal_NEW$positive_per_margin <- (performanceCal_NEW$countPosMargin/performanceCal_NEW$countTotPosMargin)*100
+
+#Plot the percentage margin positivity across the given time period for each surgeon
+plotForPositiveMargin_NEW<-ggplot(data = performanceCal_NEW, aes(x = year, y = positive_per_margin, color = Surgeon)) + 
+  geom_point(size=2) +
+  labs(title = "PERFORMANCE ANALYSIS OF UROLOGISTS\n", x = "TIME PERIOD", y = "PERCENTAGE OF MARGIN POSITIVITY", color = "SURGEON\n") +
+  scale_color_manual(values = c("blue", "red","yellow","green","black","pink","maroon","purple","darkgreen","magenta")) +theme_bw() +theme(axis.text.x = element_text(size = 10), axis.title.x = element_text(size = 10),axis.text.y = element_text(size = 10), axis.title.y = element_text(size = 10),plot.title = element_text(size = 15,hjust = 0.5, face = "bold", color = "black"))+facet_wrap(~Stage)
+
+plotForPositiveMargin_NEW
+```
